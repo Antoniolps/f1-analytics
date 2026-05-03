@@ -1,3 +1,4 @@
+from f1_analytics.application.services.overtaking_difficulty import OvertakingDifficulty
 from f1_analytics.domain.value_objects.session_type import WeekendFormat
 
 CONVENTIONAL_RACE_WEIGHTS: dict[str, float] = {
@@ -13,6 +14,12 @@ SPRINT_RACE_WEIGHTS: dict[str, float] = {
     "tire_deg": 0.15,
     "sprint_result": 0.20,
     "season_form": 0.10,
+}
+
+GRID_WEIGHT_MULTIPLIER: dict[OvertakingDifficulty, float] = {
+    OvertakingDifficulty.LOW: 0.6,
+    OvertakingDifficulty.MEDIUM: 1.0,
+    OvertakingDifficulty.HIGH: 1.4,
 }
 
 
@@ -33,8 +40,11 @@ class RaceAggregator:
         self,
         signals: dict[str, dict[str, float]],
         weekend_format: WeekendFormat,
+        overtaking_difficulty: OvertakingDifficulty = OvertakingDifficulty.MEDIUM,
     ) -> dict[str, float]:
-        weights = self._weights_by_format[weekend_format]
+        weights = self._adjust_grid_weight(
+            self._weights_by_format[weekend_format], overtaking_difficulty
+        )
         all_drivers: set[str] = set()
         for s in signals.values():
             all_drivers.update(s.keys())
@@ -56,6 +66,21 @@ class RaceAggregator:
                 total_w += weight
             scores[driver] = weighted_sum / total_w if total_w else float("inf")
         return scores
+
+    @staticmethod
+    def _adjust_grid_weight(
+        weights: dict[str, float], difficulty: OvertakingDifficulty
+    ) -> dict[str, float]:
+        multiplier = GRID_WEIGHT_MULTIPLIER[difficulty]
+        if multiplier == 1.0 or "grid" not in weights:
+            return weights
+        new_grid = weights["grid"] * multiplier
+        other_sum = sum(v for k, v in weights.items() if k != "grid")
+        new_other_sum = max(0.0, 1.0 - new_grid)
+        if other_sum <= 0:
+            return {**weights, "grid": new_grid}
+        scale = new_other_sum / other_sum
+        return {k: (new_grid if k == "grid" else v * scale) for k, v in weights.items()}
 
     @staticmethod
     def _to_rank(values: dict[str, float]) -> dict[str, float]:

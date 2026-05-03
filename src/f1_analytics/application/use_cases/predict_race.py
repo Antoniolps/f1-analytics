@@ -3,6 +3,7 @@ from f1_analytics.application.ports.season_results_repository import SeasonResul
 from f1_analytics.application.ports.weekend_repository import WeekendRepository
 from f1_analytics.application.services.lap_cleaner import LapCleaner
 from f1_analytics.application.services.long_run_extractor import LongRunExtractor
+from f1_analytics.application.services.overtaking_difficulty import classify_event
 from f1_analytics.application.services.race_aggregator import RaceAggregator
 from f1_analytics.application.services.season_form_scorer import SeasonFormScorer
 from f1_analytics.application.services.tire_degradation_analyzer import TireDegradationAnalyzer
@@ -66,7 +67,10 @@ class PredictRaceUseCase:
             signals["season_form"] = season
             signals_used.append("season_form")
 
-        scores = self.aggregator.aggregate(signals, weekend.format)
+        difficulty = classify_event(weekend.name)
+        signals_used.append(f"overtaking:{difficulty.value}")
+
+        scores = self.aggregator.aggregate(signals, weekend.format, difficulty)
         ordered = sorted(scores.items(), key=lambda kv: kv[1])
 
         grid: list[GridEntry] = []
